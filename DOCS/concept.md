@@ -344,13 +344,19 @@ Score = (Sortino × 0.4) + (Calmar × 0.3) + (Profit Factor × 0.2) + (Consisten
 **Alpha** = Performance ÜBER dem Benchmark
 
 ```
-Benchmark = BTC Buy & Hold
-Alpha = Strategie-Return - Benchmark-Return
+Benchmark = Gesamte Krypto-Marktkapitalisierung (24h Änderung)
+Alpha = Strategie-Return - Markt-Return
 
 Beispiel:
   Strategie: +5%
-  BTC: +8%
+  Krypto-Markt: +8%
   Alpha: -3% (SCHLECHT trotz Gewinn!)
+```
+
+**Datenquelle:** CoinGecko API (kostenlos)
+```bash
+curl "https://api.coingecko.com/api/v3/global"
+# → data.market_cap_change_percentage_24h_usd
 ```
 
 **Regel:** Eine Strategie mit positivem Return aber negativem Alpha wird degradiert.
@@ -361,7 +367,7 @@ Beispiel:
 
 ### 1. Benchmark-Vergleich
 
-Jede Strategie wird gegen BTC Buy & Hold gemessen:
+Jede Strategie wird gegen die Gesamte Krypto-Marktcap gemessen:
 ```
 IF strategy_return > 0 AND alpha < 0:
     → Warnung: "Underperforming vs Market"
@@ -374,14 +380,14 @@ Backtests müssen in ALLEN Marktphasen bestehen:
 
 | Regime | Erkennung | Mindest-Performance |
 |--------|-----------|---------------------|
-| **Bull** | BTC +10% in 7d | Positiver Alpha |
-| **Bear** | BTC -10% in 7d | Geringerer Verlust als BTC |
-| **Sideways** | BTC ±5% in 7d | Positiver Return |
+| **Bull** | Markt +10% in 7d | Positiver Alpha |
+| **Bear** | Markt -10% in 7d | Geringerer Verlust als Markt |
+| **Sideways** | Markt ±5% in 7d | Positiver Return |
 
 ```
 Strategie besteht nur wenn:
   - Bull-Regime: Alpha > 0
-  - Bear-Regime: Drawdown < BTC Drawdown
+  - Bear-Regime: Drawdown < Markt-Drawdown
   - Sideways: Return > 0
 ```
 
@@ -662,6 +668,85 @@ Alle 4 Stunden generiert das System automatisch einen STATUS.md:
 
 ---
 *Auto-generiert alle 4h*
+```
+
+---
+
+## Telegram-Benachrichtigungen
+
+Nutzt den bestehenden Telegram-Bot: `/home/rolf_vps/telegram-bot/`
+
+### Regelmäßige Status-Updates (Cron)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              SCHEDULED NOTIFICATIONS                        │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Frequenz      │ Inhalt                                     │
+│  ─────────────┼─────────────────────────────────────────── │
+│  Alle 4h      │ Kurzer Status (PnL, Trades, Alpha)         │
+│  Täglich 08:00│ Tages-Report (alle Champions, Alerts)      │
+│  Wöchentlich  │ Wochen-Summary + Discovery-Pipeline        │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Cron Jobs:**
+```bash
+# Alle 4 Stunden: Kurz-Status
+0 */4 * * * /home/rolf_vps/telegram-bot/send_trading_status.sh
+
+# Täglich 08:00: Tages-Report
+0 8 * * * /home/rolf_vps/telegram-bot/send_daily_report.sh
+
+# Sonntags 20:00: Wochen-Summary
+0 20 * * 0 /home/rolf_vps/telegram-bot/send_weekly_report.sh
+```
+
+### Proaktive Alerts (Event-getriggert)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              PROAKTIVE BENACHRICHTIGUNGEN                   │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Event                        │ Nachricht                   │
+│  ────────────────────────────┼──────────────────────────── │
+│  API-Fehler (Exchange)       │ 🚨 Binance API down!        │
+│  API-Fehler (CoinGecko)      │ 🚨 Benchmark-Daten fehlen   │
+│  Strategie braucht neue API  │ ⚠️ Whale Alert API needed   │
+│  Drawdown > 10%              │ 🔴 Drawdown-Warnung!        │
+│  Champion-Swap               │ 🔄 Gold: X → Y              │
+│  System-Pause                │ ⛔ Trading pausiert          │
+│  Challenger schlägt Bronze   │ 🏆 Neuer Champion!          │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Nachricht-Formate
+
+**4h Status:**
+```
+📊 Trading Genesis Status
+━━━━━━━━━━━━━━━━━━━━━
+PnL 4h: +$45.20 (+0.45%)
+Alpha: +0.12%
+Trades: 23
+🥇 RSI_Momentum: +$28.50
+🥈 MACD_Div: +$12.30
+🥉 BB_Squeeze: +$4.40
+```
+
+**Problem-Alert:**
+```
+🚨 AKTION ERFORDERLICH
+━━━━━━━━━━━━━━━━━━━━━
+Problem: CoinGecko API Rate Limit
+Impact: Benchmark-Berechnung gestoppt
+Lösung: API-Key in config eintragen
+
+Details: 429 Too Many Requests seit 14:32
 ```
 
 ---
