@@ -4,11 +4,14 @@
 
 Selbstverbesserndes High-Frequency Krypto-Trading-System mit dynamischer Strategie-Entdeckung durch Claude Code Agents.
 
+**⚠️ WICHTIG: Alles ist Paper Trading bis zur manuellen Umstellung auf Echtgeld!**
+
 **Kernprinzipien:**
 - 50-100+ Trades pro Tag → schnelle Erfolgsmessung
 - 3 aktive Champions (Gold, Silver, Bronze) + 2 Challenger-Slots
 - Echtzeit-Optimierung und dynamischer Strategie-Austausch
 - Keine hardcoded Strategien - alles wird entdeckt und validiert
+- **Paper Trading** mit echten Marktdaten (Umstellung auf Echtgeld erfolgt später manuell)
 
 ---
 
@@ -19,7 +22,7 @@ Selbstverbesserndes High-Frequency Krypto-Trading-System mit dynamischer Strateg
 │                  AKTIVE STRATEGIEN                          │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
-│  CHAMPIONS (Live Trading)         CHALLENGERS (Paper)       │
+│  CHAMPIONS (Paper)                CHALLENGERS (Paper)       │
 │  ┌───────────────────┐           ┌───────────────────┐     │
 │  │ 🥇 GOLD    (50%)  │           │ Challenger 1      │     │
 │  ├───────────────────┤           │ (testet sich)     │     │
