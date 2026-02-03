@@ -733,10 +733,12 @@ Nutzt den bestehenden Telegram-Bot: `/home/rolf_vps/telegram-bot/`
 PnL 4h: +$45.20 (+0.45%)
 Alpha: +0.12%
 Trades: 23
-🥇 RSI_Momentum: +$28.50
-🥈 MACD_Div: +$12.30
-🥉 BB_Squeeze: +$4.40
+🥇 Gold: +$28.50
+🥈 Silver: +$12.30
+🥉 Bronze: +$4.40
 ```
+
+Hinweis: Strategienamen werden vom System dynamisch vergeben basierend auf dem was der Research Agent findet. Die Nachricht zeigt nur Rang und Performance - nicht die interne Implementierung.
 
 **Problem-Alert:**
 ```
