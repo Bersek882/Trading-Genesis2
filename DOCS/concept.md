@@ -479,21 +479,21 @@ Jede Strategie hat ihr eigenes virtuelles Konto:
 │  Gesamt-Budget: $10,000                                     │
 │                                                             │
 │  ┌─────────────────────────────────────────────────────┐   │
-│  │ Gold Strategy (RSI_Momentum_v2)                     │   │
+│  │ 🥇 GOLD                                             │   │
 │  │ Allokation: 50% = $5,000                            │   │
 │  │ Aktuell: $5,234.50 (+4.69%)                         │   │
 │  │ Trades heute: 47                                    │   │
 │  └─────────────────────────────────────────────────────┘   │
 │                                                             │
 │  ┌─────────────────────────────────────────────────────┐   │
-│  │ Silver Strategy (MACD_Divergence_v1)                │   │
+│  │ 🥈 SILVER                                           │   │
 │  │ Allokation: 30% = $3,000                            │   │
 │  │ Aktuell: $2,987.20 (-0.43%)                         │   │
 │  │ Trades heute: 31                                    │   │
 │  └─────────────────────────────────────────────────────┘   │
 │                                                             │
 │  ┌─────────────────────────────────────────────────────┐   │
-│  │ Bronze Strategy (BB_Squeeze_v3)                     │   │
+│  │ 🥉 BRONZE                                           │   │
 │  │ Allokation: 20% = $2,000                            │   │
 │  │ Aktuell: $2,045.00 (+2.25%)                         │   │
 │  │ Trades heute: 22                                    │   │
@@ -509,7 +509,7 @@ Jeder Trade wird seiner Strategie zugeordnet:
 ```python
 {
     "trade_id": "t_20240115_001",
-    "strategy_id": "rsi_momentum_v2",
+    "strategy_id": "strat_2024_001",  // vom Research Agent vergeben
     "strategy_tier": "gold",
     "entry_price": 42150.00,
     "exit_price": 42380.00,
@@ -627,44 +627,42 @@ Alle 4 Stunden generiert das System automatisch einen STATUS.md:
 |--------|------|
 | Gesamt-Balance | $10,266.70 |
 | Tages-PnL | +$142.30 (+1.41%) |
-| Alpha (vs BTC) | +0.8% |
+| Alpha (vs Markt) | +0.8% |
 | Trades heute | 100 |
 
 ## Champions
 
-| Rang | Strategie | Score | PnL 24h | Trades |
-|------|-----------|-------|---------|--------|
-| 🥇 | RSI_Momentum_v2 | 2.34 | +$234.50 | 47 |
-| 🥈 | MACD_Divergence_v1 | 1.98 | -$12.80 | 31 |
-| 🥉 | BB_Squeeze_v3 | 1.76 | +$45.00 | 22 |
+| Rang | Score | PnL 24h | Trades |
+|------|-------|---------|--------|
+| 🥇 Gold | 2.34 | +$234.50 | 47 |
+| 🥈 Silver | 1.98 | -$12.80 | 31 |
+| 🥉 Bronze | 1.76 | +$45.00 | 22 |
 
 ## Challengers
 
-| Strategie | Fortschritt | Trades | vs Bronze |
-|-----------|-------------|--------|-----------|
-| EMA_Cross_v1 | 18h/24h | 75 | +0.12 |
-| Volume_Spike_v2 | 6h/24h | 25 | +0.05 |
+| Slot | Fortschritt | Trades | vs Bronze |
+|------|-------------|--------|-----------|
+| Challenger 1 | 18h/24h | 75 | +0.12 |
+| Challenger 2 | 6h/24h | 25 | +0.05 |
 
 ## Warteschlange
 
-1. Ichimoku_Cloud_v1 (Score: 1.65)
-2. ADX_Trend_v1 (Score: 1.58)
-3. VWAP_Mean_v1 (Score: 1.52)
+3 Strategien bereit (vom Research Agent entdeckt)
 
 ## Alerts (letzte 24h)
 
-- ⚠️ 12:30 - Silver Strategie: Sharpe -15% (4h window)
+- ⚠️ 12:30 - Silver: Sharpe -15% (4h window)
 - ✅ 12:45 - Silver: Erholt auf -5%
-- 🔄 08:00 - Gold/Silver Swap: RSI_Momentum überholt MACD
+- 🔄 08:00 - Gold/Silver Swap durchgeführt
 
 ## Discovery Pipeline
 
-| Status | Strategien |
-|--------|------------|
+| Status | Anzahl |
+|--------|--------|
 | Research | 2 in Arbeit |
 | Validation | 1 wartend |
-| Backtest | ADX_Trend_v1 |
-| Pending Requirements | Whale_Momentum (fehlt: Whale Alert API) |
+| Backtest | 1 läuft |
+| Pending Requirements | 1 (fehlt: API)
 
 ---
 *Auto-generiert alle 4h*
