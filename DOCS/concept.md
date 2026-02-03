@@ -49,7 +49,7 @@ Selbstverbesserndes High-Frequency Krypto-Trading-System mit dynamischer Strateg
 ### Aufstieg und Abstieg
 
 ```
-Challenger schlägt Bronze (nach 24-48h)?
+Challenger schlägt Bronze (nach max 24h)?
     │
     ├─ JA → Challenger wird Bronze
     │       Bronze wird in Warteschlange (oder verworfen)
@@ -173,9 +173,9 @@ Bei 50-100 Trades/Tag:
 | 6h | ~25 | Trend erkennbar |
 | 12h | ~50 | Erste Signifikanz |
 | 24h | ~100 | Gute Signifikanz |
-| 48h | ~200 | Hohe Signifikanz |
+| 48h | ~200 | Sehr hohe Signifikanz (optional) |
 
-**Challenger-Testzeit:** Minimum 24h, Maximum 48h
+**Challenger-Testzeit:** Maximum 24h (bei 100+ Trades auch früher bewertbar)
 
 ---
 
@@ -258,8 +258,8 @@ Strategie Status: PENDING_REQUIREMENTS
 │  1. Strategie kommt aus Warteschlange                       │
 │     └─ Wird Challenger (Paper Trading)                      │
 │                                                             │
-│  2. Läuft 24-48 Stunden                                     │
-│     └─ Sammelt mindestens 50-100 Trades                     │
+│  2. Läuft maximal 24 Stunden                                │
+│     └─ Sammelt mindestens 100 Trades                     │
 │                                                             │
 │  3. Vergleich mit Bronze Champion                           │
 │     │                                                       │
@@ -283,7 +283,7 @@ Strategie Status: PENDING_REQUIREMENTS
 |-------|------|
 | Mindest-Trades vor Vergleich | 50 |
 | Mindest-Testzeit | 24h |
-| Maximum-Testzeit | 48h |
+| Maximum-Testzeit | 24h |
 | Cooldown nach Swap | 6h |
 | Max Swaps pro Tag | 3 |
 | Rollback-Fenster | 2h nach Swap |
@@ -314,6 +314,355 @@ Kontinuierliche Streaming-Analyse:
 - Rolling Drawdown
 - Erkennt Performance-Drift in Echtzeit
 - Triggert Alerts bei Anomalien
+
+---
+
+## Erfolgsmessung (Composite Score)
+
+### Warum nicht nur Return?
+
+Return allein ist gefährlich:
+- **Hohe Returns + Hohe Volatilität** = Glück, nicht Skill
+- **Moderate Returns + Konsistenz** = Robuste Strategie
+
+### Composite Score Formel
+
+```
+Score = (Sortino × 0.4) + (Calmar × 0.3) + (Profit Factor × 0.2) + (Consistency × 0.1)
+```
+
+| Metrik | Gewichtung | Warum |
+|--------|------------|-------|
+| **Sortino Ratio** | 40% | Bestraft nur Downside-Volatilität |
+| **Calmar Ratio** | 30% | Return / Max Drawdown |
+| **Profit Factor** | 20% | Gross Profit / Gross Loss |
+| **Consistency** | 10% | % profitable 4h-Perioden |
+
+### Alpha vs Return
+
+**Return** = Absolute Performance
+**Alpha** = Performance ÜBER dem Benchmark
+
+```
+Benchmark = BTC Buy & Hold
+Alpha = Strategie-Return - Benchmark-Return
+
+Beispiel:
+  Strategie: +5%
+  BTC: +8%
+  Alpha: -3% (SCHLECHT trotz Gewinn!)
+```
+
+**Regel:** Eine Strategie mit positivem Return aber negativem Alpha wird degradiert.
+
+---
+
+## Overfitting-Schutz
+
+### 1. Benchmark-Vergleich
+
+Jede Strategie wird gegen BTC Buy & Hold gemessen:
+```
+IF strategy_return > 0 AND alpha < 0:
+    → Warnung: "Underperforming vs Market"
+    → Strategie wird nicht befördert
+```
+
+### 2. Regime-Testing
+
+Backtests müssen in ALLEN Marktphasen bestehen:
+
+| Regime | Erkennung | Mindest-Performance |
+|--------|-----------|---------------------|
+| **Bull** | BTC +10% in 7d | Positiver Alpha |
+| **Bear** | BTC -10% in 7d | Geringerer Verlust als BTC |
+| **Sideways** | BTC ±5% in 7d | Positiver Return |
+
+```
+Strategie besteht nur wenn:
+  - Bull-Regime: Alpha > 0
+  - Bear-Regime: Drawdown < BTC Drawdown
+  - Sideways: Return > 0
+```
+
+### 3. Parameter-Sensitivität
+
+```
+Optimizer testet Parameter ±20%:
+
+Original: RSI Period = 14, Threshold = 30
+Test 1: RSI Period = 11, Threshold = 30
+Test 2: RSI Period = 17, Threshold = 30
+Test 3: RSI Period = 14, Threshold = 24
+Test 4: RSI Period = 14, Threshold = 36
+
+Wenn Performance stark schwankt → OVERFIT!
+```
+
+**Stabile Strategie:** Kleine Parameter-Änderungen → Kleine Performance-Änderungen
+
+---
+
+## Degradation Monitoring
+
+### Rolling Metrics (Echtzeit)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              ROLLING WINDOWS                                │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Window    │ Aktualisierung │ Verwendet für                │
+│  ──────────┼────────────────┼───────────────────────────── │
+│  1h        │ Jede Minute    │ Anomalie-Erkennung           │
+│  4h        │ Alle 5 Min     │ Micro-Optimierung            │
+│  12h       │ Alle 15 Min    │ Trend-Erkennung              │
+│  24h       │ Stündlich      │ Champion-Vergleich           │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Alert-Stufen
+
+| Stufe | Trigger | Aktion |
+|-------|---------|--------|
+| **INFO** | Sharpe fällt um 10% | Logging |
+| **WARNING** | Sharpe fällt um 25% | Notification |
+| **CRITICAL** | Sharpe fällt um 50% | Auto-Pause + Review |
+| **EMERGENCY** | Drawdown > 15% | Sofortiger Stop |
+
+### Auto-Response
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              DEGRADATION RESPONSE                           │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Degradation erkannt (Sharpe -25% über 4h)                  │
+│                 │                                           │
+│                 ▼                                           │
+│  ┌─────────────────────────────┐                            │
+│  │ 1. Position Size -50%       │                            │
+│  │ 2. Optimizer triggern       │                            │
+│  │ 3. 2h Beobachtungsfenster   │                            │
+│  └─────────────────────────────┘                            │
+│                 │                                           │
+│     ┌───────────┴───────────┐                               │
+│     ▼                       ▼                               │
+│  Erholt sich?           Weiter schlecht?                    │
+│     │                       │                               │
+│     ▼                       ▼                               │
+│  Normalbetrieb          Abstufung (Gold→Silver→Bronze)      │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Budget Tracking (Virtuelle Konten)
+
+### Konzept
+
+Jede Strategie hat ihr eigenes virtuelles Konto:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                 VIRTUELLE KONTEN                            │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Gesamt-Budget: $10,000                                     │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │ Gold Strategy (RSI_Momentum_v2)                     │   │
+│  │ Allokation: 50% = $5,000                            │   │
+│  │ Aktuell: $5,234.50 (+4.69%)                         │   │
+│  │ Trades heute: 47                                    │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │ Silver Strategy (MACD_Divergence_v1)                │   │
+│  │ Allokation: 30% = $3,000                            │   │
+│  │ Aktuell: $2,987.20 (-0.43%)                         │   │
+│  │ Trades heute: 31                                    │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │ Bronze Strategy (BB_Squeeze_v3)                     │   │
+│  │ Allokation: 20% = $2,000                            │   │
+│  │ Aktuell: $2,045.00 (+2.25%)                         │   │
+│  │ Trades heute: 22                                    │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Performance Attribution
+
+Jeder Trade wird seiner Strategie zugeordnet:
+
+```python
+{
+    "trade_id": "t_20240115_001",
+    "strategy_id": "rsi_momentum_v2",
+    "strategy_tier": "gold",
+    "entry_price": 42150.00,
+    "exit_price": 42380.00,
+    "pnl": 23.50,
+    "pnl_percent": 0.55,
+    "virtual_balance_after": 5234.50
+}
+```
+
+---
+
+## Logging & Datenbank
+
+### Zentrale PostgreSQL Datenbank
+
+Keine verteilten Log-Dateien. Alles in einer DB:
+
+```sql
+-- Kern-Tabellen
+trades              -- Jeder einzelne Trade
+strategy_snapshots  -- Stündliche Strategy-Metriken
+alerts              -- Alle Warnungen und Ereignisse
+optimizer_runs      -- Parameter-Änderungen
+discovery_pipeline  -- Neue Strategien im Prozess
+```
+
+### Trade Log Schema
+
+```sql
+CREATE TABLE trades (
+    id SERIAL PRIMARY KEY,
+    timestamp TIMESTAMPTZ DEFAULT NOW(),
+    strategy_id VARCHAR(50),
+    strategy_tier VARCHAR(10),  -- gold/silver/bronze/challenger
+    symbol VARCHAR(20),
+    side VARCHAR(10),           -- buy/sell
+    entry_price DECIMAL(20,8),
+    exit_price DECIMAL(20,8),
+    quantity DECIMAL(20,8),
+    pnl DECIMAL(20,8),
+    pnl_percent DECIMAL(10,4),
+    fees DECIMAL(20,8),
+    slippage DECIMAL(20,8),
+    duration_seconds INTEGER,
+    metadata JSONB              -- Flexible Zusatzinfos
+);
+```
+
+### Strategy Snapshot Schema
+
+```sql
+CREATE TABLE strategy_snapshots (
+    id SERIAL PRIMARY KEY,
+    timestamp TIMESTAMPTZ DEFAULT NOW(),
+    strategy_id VARCHAR(50),
+    tier VARCHAR(10),
+
+    -- Performance Metriken
+    total_trades INTEGER,
+    win_rate DECIMAL(5,2),
+    profit_factor DECIMAL(10,4),
+    sharpe_ratio DECIMAL(10,4),
+    sortino_ratio DECIMAL(10,4),
+    calmar_ratio DECIMAL(10,4),
+    max_drawdown DECIMAL(10,4),
+
+    -- Composite Score
+    composite_score DECIMAL(10,4),
+    alpha DECIMAL(10,4),
+
+    -- Budget
+    allocated_balance DECIMAL(20,8),
+    current_balance DECIMAL(20,8),
+
+    -- Rolling Windows
+    sharpe_1h DECIMAL(10,4),
+    sharpe_4h DECIMAL(10,4),
+    sharpe_24h DECIMAL(10,4)
+);
+```
+
+---
+
+## Auto-generierter STATUS.md
+
+### Konzept
+
+Alle 4 Stunden generiert das System automatisch einen STATUS.md:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                 STATUS.md GENERATION                        │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  PostgreSQL ──► Analyzer Agent ──► STATUS.md                │
+│                                                             │
+│  Trigger: Alle 4 Stunden oder bei wichtigen Events          │
+│  Output: /status/STATUS.md (wird überschrieben)             │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### STATUS.md Template
+
+```markdown
+# Trading Genesis 2 - Status
+
+**Stand:** 2024-01-15 14:00 UTC
+**Uptime:** 3d 14h 22m
+**Modus:** Paper Trading
+
+## Portfolio Übersicht
+
+| Metrik | Wert |
+|--------|------|
+| Gesamt-Balance | $10,266.70 |
+| Tages-PnL | +$142.30 (+1.41%) |
+| Alpha (vs BTC) | +0.8% |
+| Trades heute | 100 |
+
+## Champions
+
+| Rang | Strategie | Score | PnL 24h | Trades |
+|------|-----------|-------|---------|--------|
+| 🥇 | RSI_Momentum_v2 | 2.34 | +$234.50 | 47 |
+| 🥈 | MACD_Divergence_v1 | 1.98 | -$12.80 | 31 |
+| 🥉 | BB_Squeeze_v3 | 1.76 | +$45.00 | 22 |
+
+## Challengers
+
+| Strategie | Fortschritt | Trades | vs Bronze |
+|-----------|-------------|--------|-----------|
+| EMA_Cross_v1 | 18h/24h | 75 | +0.12 |
+| Volume_Spike_v2 | 6h/24h | 25 | +0.05 |
+
+## Warteschlange
+
+1. Ichimoku_Cloud_v1 (Score: 1.65)
+2. ADX_Trend_v1 (Score: 1.58)
+3. VWAP_Mean_v1 (Score: 1.52)
+
+## Alerts (letzte 24h)
+
+- ⚠️ 12:30 - Silver Strategie: Sharpe -15% (4h window)
+- ✅ 12:45 - Silver: Erholt auf -5%
+- 🔄 08:00 - Gold/Silver Swap: RSI_Momentum überholt MACD
+
+## Discovery Pipeline
+
+| Status | Strategien |
+|--------|------------|
+| Research | 2 in Arbeit |
+| Validation | 1 wartend |
+| Backtest | ADX_Trend_v1 |
+| Pending Requirements | Whale_Momentum (fehlt: Whale Alert API) |
+
+---
+*Auto-generiert alle 4h*
+```
 
 ---
 
