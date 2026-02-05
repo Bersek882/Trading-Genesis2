@@ -52,6 +52,19 @@ Selbstverbesserndes Active-Intraday Krypto-Trading-System mit dynamischer Strate
 
 **Kommunikation:** Kein Agent-zu-Agent Messaging. Python Daemon schreibt State in DB → Claude liest, entscheidet, schreibt Aktionen zurück → Python führt aus. Claude hat nur READ-Zugriff auf die DB. Nur der Daemon schreibt.
 
+### Agent-Kontext (was fließt in den Prompt?)
+
+| Agent | Kontext-Daten aus DB/State |
+|-------|---------------------------|
+| Analyzer | Rolling Metriken (4-24h), aktuelle Positionen, Alert-History |
+| Optimizer | Strategy-Config, Performance 24h, Parameter-History |
+| Orchestrator | Champion-Ranking, Challenger-Status, Swap-History |
+| Research | Marktstruktur (Volatilität, Trends, Korrelationen), bestehende Strategy-Familien |
+| Coder | Hypothese vom Research Agent, IStrategy-Interface, Building-Block-Katalog |
+| Evaluator | Backtest-Ergebnisse, DSR-Werte, Korrelationsmatrix zu Champions |
+
+**Prompt-Strategie:** Zweiteilige Prompts — statische Instruktionen (Rolle, Constraints, Output-Schema) + dynamischer Runtime-Kontext (DB-Daten, Markt-Snapshot). Templates in `prompts/` Verzeichnis, versioniert. Output immer als JSON gegen definiertes Schema validiert.
+
 ---
 
 ## 4. StrategySpec Interface
@@ -325,6 +338,13 @@ Jede Claude-CLI-Entscheidung wird geloggt — vollständig und unveränderbar:
 - Range-Check: Preise ±5% vom Markt (sonst → Halluzination)
 - Rate-Limit: Max N Aktionen pro Stunde
 - Exposure-Check: Würde die Aktion Limits verletzen?
+- Daten-Grounding: Agents entscheiden NUR auf Basis der im Prompt bereitgestellten Daten, nicht auf Basis von allgemeinem LLM-Wissen
+
+**Retry bei Parse-Fehlern:** Max 3 Versuche, dann Safe Default (keine Aktion):
+1. Gleicher Prompt, gleiches Modell (transientes Problem)
+2. Prompt mit Fehler-Feedback ("Antwort ungültig. Fehler: X. Bitte valides JSON.")
+3. Fallback auf einfacheres Modell (Opus → Sonnet → Haiku)
+4. Keine Aktion + Telegram-Alert. Besser nichts tun als auf fehlerhaften Output reagieren.
 
 ### 10.2 Change Governance
 
@@ -356,7 +376,21 @@ Jede Claude-CLI-Entscheidung wird geloggt — vollständig und unveränderbar:
 | CRITICAL | Sharpe −50% | Auto-Pause, Optimizer triggern |
 | EMERGENCY | DD > 15% | Full Stop, alle Positionen schließen |
 
-### 10.4 Crash Recovery
+### 10.4 Monitoring Dashboard
+
+Telegram-Alerts allein reichen nicht für 50-100+ Trades/Tag mit 3-5 aktiven Strategien. Visuelles Monitoring ist nötig.
+
+**Phase 1 (Bootstrapping):** Streamlit — schnellstes Setup, pure Python, eine Datei.
+**Phase 2 (Vollbetrieb):** + Grafana — 24/7 Auto-Refresh, eingebautes Alerting, native PostgreSQL-Anbindung.
+
+**Dashboard-Metriken:**
+- Live-Equity-Kurven aller Champions + Challenger
+- Portfolio: Net Exposure, Daily PnL, Drawdown, Sharpe
+- Korrelations-Heatmap zwischen Strategien
+- Agent-Activity-Log (letzte Entscheidungen + Guardrail-Ergebnisse)
+- System-Health: WebSocket-Status, DB-Size, Agent-Laufzeiten, Latenz
+
+### 10.5 Crash Recovery
 
 - **systemd:** `Restart=always`, `RestartSec=10`, `WatchdogSec=300`
 - **Bei Neustart:** Offene Positionen prüfen (Exchange-Side), DB-State abgleichen, Inkonsistenzen → Telegram-Alert + manueller Review
@@ -432,18 +466,20 @@ Vergleichstabelle: Simulierter Fill vs. tatsächlicher Fill → Slippage-Modell 
 
 ### Agents
 
-| # | Agent | Implementierung | Frequenz |
-|---|-------|-----------------|----------|
-| 1 | Signal Engine | Python Daemon | Kontinuierlich |
-| 2 | Risk Engine | Python Daemon | Bei jedem Signal |
-| 3 | Order Executor | Python Daemon | Bei validiertem Trade |
-| 4 | Trade Monitor | Python Daemon | Kontinuierlich |
-| 5 | Orchestrator | Claude CLI | Alle 1-4h |
-| 6 | Analyzer | Claude CLI | Alle 1-4h |
-| 7 | Optimizer | Claude CLI | Alle 1-4h / Täglich |
-| 8 | Research Agent | Claude CLI | Wöchentlich |
-| 9 | Coder Agent | Claude CLI | Bei neuer Hypothese |
-| 10 | Evaluator | Claude CLI | Nach Backtests |
+| # | Agent | Implementierung | Modell | Frequenz |
+|---|-------|-----------------|--------|----------|
+| 1 | Signal Engine | Python Daemon | — | Kontinuierlich |
+| 2 | Risk Engine | Python Daemon | — | Bei jedem Signal |
+| 3 | Order Executor | Python Daemon | — | Bei validiertem Trade |
+| 4 | Trade Monitor | Python Daemon | — | Kontinuierlich |
+| 5 | Orchestrator | Claude CLI | Sonnet | Alle 1-4h |
+| 6 | Analyzer | Claude CLI | Haiku | Alle 1-4h |
+| 7 | Optimizer | Claude CLI | Sonnet | Alle 1-4h / Täglich |
+| 8 | Research Agent | Claude CLI | Opus | Wöchentlich |
+| 9 | Coder Agent | Claude CLI | Opus | Bei neuer Hypothese |
+| 10 | Evaluator | Claude CLI | Sonnet | Nach Backtests |
+
+**Model-Tiering:** Haiku für einfache, häufige Tasks (schneller, günstiger). Sonnet für strukturierte Entscheidungen. Opus für kreative/komplexe Aufgaben (Hypothesen, Code-Generierung).
 
 ### Datenbank (PostgreSQL)
 
