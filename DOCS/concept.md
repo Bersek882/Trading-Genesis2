@@ -1,770 +1,493 @@
 # Trading Genesis 2 - Konzept
 
-## Überblick
+## 1. Überblick
 
 Selbstverbesserndes Active-Intraday Krypto-Trading-System mit dynamischer Strategie-Entdeckung durch Claude Code Agents.
 
-**Alles ist Paper Trading bis zur manuellen Umstellung auf Echtgeld!**
+**Alles ist Paper Trading bis zur manuellen Umstellung auf Echtgeld.**
 
 **Kernprinzipien:**
-- 50-100+ Trades pro Tag → schnelle Erfolgsmessung
-- 3 aktive Champions (Gold, Silver, Bronze) + 2 Challenger-Slots
-- Echtzeit-Optimierung und dynamischer Strategie-Austausch
-- Keine hardcoded Strategien - alles wird entdeckt und validiert
-- Paper Trading mit echten Marktdaten (Echtgeld-Umstellung erfolgt manuell)
+- 50-100+ Trades/Tag → schnelle statistische Signifikanz
+- 3 Champions (Gold/Silver/Bronze) + 2 Challenger-Slots
+- Strategien werden vom System entdeckt, kombiniert und parametrisiert — basierend auf einem Baukasten bewährter Indikatoren
+- Python Daemon entscheidet schnell (Echtzeit), Claude CLI optimiert die Regeln (periodisch)
 
 ---
 
-## Strategie-Hierarchie
+## 2. Markt-Definition
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                  AKTIVE STRATEGIEN                          │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  CHAMPIONS (Paper)                CHALLENGERS (Paper)       │
-│  ┌───────────────────┐           ┌───────────────────┐     │
-│  │ 🥇 GOLD    (50%)  │           │ Challenger 1      │     │
-│  ├───────────────────┤           │ (testet sich)     │     │
-│  │ 🥈 SILVER  (30%)  │           ├───────────────────┤     │
-│  ├───────────────────┤           │ Challenger 2      │     │
-│  │ 🥉 BRONZE  (20%)  │           │ (testet sich)     │     │
-│  └───────────────────┘           └───────────────────┘     │
-│                                                             │
-│  WARTESCHLANGE (Ready to Challenge)                         │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │ Strategy A │ Strategy B │ Strategy C │ ... (max 5)  │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
+| Parameter | Wert (Initial) | Später erweiterbar |
+|-----------|----------------|-------------------|
+| **Instrument** | Spot | Perpetual Futures |
+| **Richtung** | Long only | Long + Short |
+| **Leverage** | Kein (1x) | Bis 3x |
+| **Paare** | USDT-Paare + Krypto/Krypto (z.B. ETH/BTC) | — |
+| **Liquiditäts-Minimum** | >$50M 24h-Volumen, Spread <0.1% | — |
+| **Ordertypen** | Market, Limit, OCO (Stop-Loss + Take-Profit) | Post-Only, Trailing |
+| **Rundung** | Per Exchange-Info API (stepSize/tickSize) | — |
 
-### Kapitalverteilung
-
-| Slot | Anteil | Beschreibung |
-|------|--------|--------------|
-| Gold | 50% | Beste performende Strategie |
-| Silver | 30% | Zweitbeste Strategie |
-| Bronze | 20% | Drittbeste Strategie |
-| Challenger 1-2 | Paper | Testen gegen Champions |
-
-### Aufstieg und Abstieg
-
-```
-Challenger schlägt Bronze (nach max 24h)?
-    ├─ JA → Challenger wird Bronze, Bronze in Warteschlange
-    └─ NEIN → Challenger verworfen, nächste aus Warteschlange
-
-Innerhalb Champions:
-    Bronze schlägt Silver? → Tauschen
-    Silver schlägt Gold?   → Tauschen
-```
+**Pair Selection:** Dynamisch. Täglich Top-Paare nach Volumen + Volatilität evaluieren. Verschiedene Strategien können verschiedene Paare handeln. Blacklist für Delisting-Risiko.
 
 ---
 
-## System-Architektur (Hybrid: Python Daemon + Claude CLI)
-
-Das System besteht aus zwei Schichten:
-- **Python Daemon** (läuft 24/7): Echtzeit-Execution, Monitoring, Datensammlung
-- **Claude CLI** (periodisch, ~12s Latenz): Strategische Entscheidungen, Analyse, Discovery
-
-Claude CLI ist zu langsam für Echtzeit-Entscheidungen. Deshalb: Python entscheidet schnell nach vordefinierten Regeln, Claude optimiert die Regeln periodisch.
+## 3. System-Architektur
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│              PYTHON DAEMON (24/7, Millisekunden)             │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  Signal Engine ──► Risk Engine ──► Order Executor           │
-│       │                                │                    │
-│       └──────────┬─────────────────────┘                    │
-│                  ▼                                          │
-│           Trade Monitor (streamt jeden Trade → DB)          │
-│                                                             │
-│  WebSocket Feeds ──► Preis-Engine ──► Indikator-Engine      │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-                   │
-                   ▼ (PostgreSQL als State Store)
-┌─────────────────────────────────────────────────────────────┐
-│           CLAUDE CLI AGENTS (periodisch, ~12s/Call)          │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  ANALYSE (alle 1-4h):                                       │
-│  ├─ Analyzer Agent: Performance-Drift erkennen              │
-│  ├─ Optimizer Agent: Parameter-Updates berechnen            │
-│  └─ Orchestrator: Champion-Ranking, Hot-Swaps               │
-│                                                             │
-│  DISCOVERY (täglich/wöchentlich):                            │
-│  ├─ Research Agent: Hypothesen generieren                    │
-│  ├─ Coder Agent: Strategien implementieren                  │
-│  └─ Evaluator Agent: Backtests bewerten                     │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│         PYTHON DAEMON (24/7, systemd, Millisekunden)    │
+├─────────────────────────────────────────────────────────┤
+│  WebSocket ──► Preis-Engine ──► Indikator-Engine        │
+│  Signal Engine ──► Risk Engine ──► Order Executor       │
+│  Trade Monitor ──► alle Trades → PostgreSQL             │
+└──────────────────────┬──────────────────────────────────┘
+                       │ PostgreSQL = State Store
+┌──────────────────────▼──────────────────────────────────┐
+│         CLAUDE CLI AGENTS (periodisch, ~12s/Call)       │
+├─────────────────────────────────────────────────────────┤
+│  Alle 1-4h:  Analyzer, Optimizer, Orchestrator          │
+│  Täglich:    Walk-Forward Reoptimierung                  │
+│  Wöchentlich: Research Agent (Hypothesen-Generator)      │
+└─────────────────────────────────────────────────────────┘
 ```
 
-### Kommunikation
-
-Kein Agent-zu-Agent Messaging. Alles über PostgreSQL:
-- Python Daemon schreibt Trades, Metriken, Snapshots in DB
-- Claude CLI liest DB-State, trifft Entscheidungen, schreibt Aktionen zurück
-- Python Daemon liest Aktionen (Parameter-Updates, Swap-Befehle) und führt aus
+**Kommunikation:** Kein Agent-zu-Agent Messaging. Python Daemon schreibt State in DB → Claude liest, entscheidet, schreibt Aktionen zurück → Python führt aus. Claude hat nur READ-Zugriff auf die DB. Nur der Daemon schreibt.
 
 ---
 
-## Bootstrapping Phase
+## 4. StrategySpec Interface
 
-Das System kann nicht am Tag 1 mit Champions starten. Aufbau in Phasen:
+Jede Strategie ist ein Python-Modul mit festem Interface:
 
-| Phase | Zeitraum | Aktion |
-|-------|----------|--------|
-| **1 - Seed** | Tag 1-7 | 3 Basis-Strategien starten (Trend-Following, Mean-Reversion, Volatility-Breakout). Alle als Paper-Champions gleichgewichtet. Daten sammeln. |
-| **2 - Validierung** | Tag 7-14 | Walk-Forward Tests mit gesammelten Daten. Erste Parameter-Optimierung. Monte Carlo Validierung. |
-| **3 - Ranking** | Tag 14-21 | Champion-System aktivieren (Gold/Silver/Bronze nach Performance). Erste Challenger aus Discovery Pipeline. |
-| **4 - Vollbetrieb** | Ab Tag 21 | Komplettes System: Champions, Challenger, Discovery Pipeline, Auto-Optimierung. |
+```python
+class IStrategy:
+    # Pflicht-Attribute
+    timeframe: str              # "1m", "5m", "15m"
+    allowed_pairs: list[str]    # ["BTC/USDT", "ETH/USDT"]
+    stoploss: float             # -0.02 (2% vom Entry)
+    max_orders_per_hour: int    # Rate-Limit
 
-Die 3 Seed-Strategien werden manuell oder per Claude CLI initial erstellt. Sie dienen als Startpunkt - das System ersetzt sie sobald bessere entdeckt werden.
+    # Pflicht-Methoden
+    def generate_signal(self, candles, indicators) -> Signal | None
+    def calculate_exit(self, position, candles) -> ExitSignal | None
+    def get_position_size(self, balance, risk_budget) -> float
+
+    # Constraints (vom System erzwungen, nicht überschreibbar)
+    MAX_LEVERAGE = 1            # Initial kein Leverage
+    MAX_POSITION_PCT = 0.10     # Max 10% des Budgets pro Position
+    MAX_DAILY_TRADES = 200      # Hard Limit
+```
+
+**Sandboxing:** Claude-generierter Strategie-Code läuft in gVisor-sandboxed Docker Containern. Kein Zugriff auf API-Keys, DB oder Netzwerk. Nur strukturierte JSON-Signale als Output. Der Daemon validiert jedes Signal gegen Schema + Range-Checks bevor er handelt.
+
+**Hot-Reload:** Neue Strategie-Version = neuer Prozess starten, alten graceful stoppen. Kein `importlib.reload()`.
 
 ---
 
-## Zeitplan
+## 5. Discovery Pipeline
+
+### 5.1 Ansatz: Hypothesis Generator
+
+~90% öffentlich verfügbarer Strategien sind overfit. Der Research Agent kopiert nicht — er generiert Hypothesen:
 
 ```
-KONTINUIERLICH (Python Daemon):
-├─ Signal Engine generiert Signale nach Strategie-Regeln
-├─ Order Executor führt Trades aus
-└─ Monitor trackt jeden Trade in DB
-
-ALLE 1-4 STUNDEN (Claude CLI):
-├─ Performance-Vergleich aller aktiven Strategien
-├─ Champion-Ranking aktualisieren (Gold/Silver/Bronze)
-├─ Challenger vs Bronze Vergleich
-└─ Hot-Swap wenn Challenger signifikant besser
-
-TÄGLICH (Claude CLI):
-├─ Walk-Forward Reoptimierung aller Champions
-├─ Vollständiger Performance-Report
-└─ Discovery-Pipeline: Warteschlange auffüllen
-
-WÖCHENTLICH (Claude CLI):
-└─ Research Agent generiert neue Strategie-Hypothesen
+Research Agent (Claude CLI)
+  ├─ Analysiert Marktstruktur aus DB (Volatilität, Trends, Korrelationen)
+  ├─ Generiert Hypothese: "Mean-Reversion mit engen BB bei Seitwärtstrend"
+  ├─ Kombiniert Building Blocks (siehe unten)
+  └─ Optional: Akademische Quellen (arXiv, SSRN) als Inspiration
+      │
+      ▼
+Coder Agent (Claude CLI) → Implementiert als IStrategy
+      │
+      ▼
+Automatisierte Validation Gates (VectorBT)
+      │
+      ▼
+Evaluator Agent (Claude CLI) → DSR + FDR-Korrektur
+      │
+      ▼
+Warteschlange (max 5) → bereit für Challenger-Slot
 ```
 
-### Statistische Basis
-
-Bei 50-100 Trades/Tag:
-
-| Zeitraum | Trades | Aussagekraft |
-|----------|--------|--------------|
-| 6h | ~25 | Trend erkennbar |
-| 12h | ~50 | Erste Signifikanz |
-| 24h | ~100 | Gute Signifikanz |
-
-**Challenger-Testzeit:** Maximum 24h (bei 100+ Trades auch früher bewertbar)
-
----
-
-## Discovery Pipeline
-
-### Grundproblem
-
-~90% der öffentlich verfügbaren Trading-Strategien sind overfit oder unprofitabel. Einfaches Kopieren von GitHub/TradingView ist naiv.
-
-### Ansatz: Hypothesis Generator + Building Block Combiner
-
-Der Research Agent ist KEIN Internet-Scraper. Er ist ein Hypothesen-Generator:
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                   DISCOVERY PIPELINE                        │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  1. RESEARCH AGENT (Claude CLI)                             │
-│     ├─ Analysiert aktuelle Marktstruktur (Volatilität,      │
-│     │  Trends, Korrelationen) aus DB-Daten                  │
-│     ├─ Generiert Hypothesen: "Bei hoher Volatilität +       │
-│     │  Seitwärtstrend → Mean-Reversion könnte profitabel    │
-│     │  sein mit engen Bändern"                              │
-│     ├─ Kombiniert Building Blocks:                          │
-│     │  Entries: Momentum, Mean-Reversion, Breakout,         │
-│     │  Pattern Recognition                                  │
-│     │  Filters: Volatility, Volume, Trend, Regime           │
-│     │  Exits: ATR-Trail, Time-Based, Target                 │
-│     └─ Optional: Internet-Research als Inspiration          │
-│        (arXiv, SSRN - akademische Quellen bevorzugt)        │
-│                                                             │
-│  2. CODER AGENT (Claude CLI)                                │
-│     └─ Implementiert Hypothese als ausführbare Strategie    │
-│                                                             │
-│  3. BACKTEST (VectorBT - automatisiert)                     │
-│     ├─ Walk-Forward: IS=5d, OOS=2d, WFE > 0.5              │
-│     ├─ Monte Carlo: 10.000x Bootstrap, 95% CI Sharpe > 0   │
-│     ├─ Regime-Tests: Bull, Bear, Sideways                   │
-│     └─ Parameter-Sensitivität: ±20% Stabilität              │
-│                                                             │
-│  4. EVALUATOR (Claude CLI)                                  │
-│     ├─ Benjamini-Hochberg FDR-Korrektur (10%)               │
-│     ├─ Prüft Korrelation zu bestehenden Champions           │
-│     └─ Ranking nach Composite Score                         │
-│                                                             │
-│  5. WARTESCHLANGE (max 5 Strategien)                        │
-│     └─ Bereit für Challenger-Slot                           │
-│                                                             │
-│  PENDING: Falls Datenquellen fehlen                         │
-│     └─ pending_requirements.json → User benachrichtigen     │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Building Blocks
-
-Statt ganze Strategien zu kopieren, kombiniert das System modulare Bausteine:
+### 5.2 Building Blocks
 
 | Kategorie | Beispiele |
 |-----------|-----------|
-| **Entry Signals** | Momentum (RSI, MACD), Mean-Reversion (BB, Keltner), Breakout (ATR, Donchian), Volume-Spike |
-| **Filters** | Trend (EMA Cross, ADX), Volatilität (ATR-Level), Volume, Regime |
-| **Exit Rules** | ATR-Trailing-Stop, Time-Based, Fixed Target, Chandelier Exit |
-| **Position Sizing** | Fixed-Fraction, Volatility-Adjusted, Kelly Criterion |
+| **Entry** | Momentum (RSI, MACD), Mean-Reversion (BB, Keltner), Breakout (ATR, Donchian), Volume-Spike |
+| **Filter** | Trend (EMA, ADX), Volatilität (ATR-Level), Volume, Regime |
+| **Exit** | ATR-Trail, Time-Based, Fixed Target, Chandelier |
+| **Sizing** | Fixed-Fraction, Volatility-Adjusted, Quarter-Kelly |
 
-Der Research Agent kombiniert diese Bausteine zu neuen Strategien und parametrisiert sie.
+### 5.3 Validation Gates
+
+Jede Strategie muss **alle** Gates bestehen:
+
+| # | Gate | Kriterium | Zweck |
+|---|------|-----------|-------|
+| 1 | **Walk-Forward** | IS=5d, OOS=2d, WFE > 0.5 | Robustheit |
+| 2 | **Monte Carlo** | 10.000× Bootstrap, 95% CI Sharpe > 0 | Zufalls-Ausschluss |
+| 3 | **Regime-Test** | Profitabel in Bull, Bear UND Sideways | Regime-Robustheit |
+| 4 | **Parameter-Sensitivität** | ±20% Variation → Performance stabil | Overfitting-Check |
+| 5 | **Cost-Edge** | Profit Factor > 1.5 nach Fees+Slippage | Kosten-Deckung |
+| 6 | **DSR** | Deflated Sharpe Ratio > 0 (p < 0.05) | Statistische Signifikanz |
+| 7 | **Korrelation** | \|r\| < 0.60 zu bestehenden Champions | Diversifikation |
+
+### 5.4 Deflated Sharpe Ratio (DSR)
+
+Primäres Signifikanz-Gate. Korrigiert gleichzeitig für:
+- **N:** Anzahl aller jemals getesteten Strategien (Gesamt-Zähler in DB)
+- **Skewness & Kurtosis:** Crypto-Heavy-Tails
+- **Stichprobengröße T**
+
+```
+DSR = Φ[((SR̂ - SR₀) × √(T-1)) / √(1 - γ₃×SR̂ + ((γ₄-1)/4) × SR̂²)]
+```
+
+SR₀ = erwarteter Maximum-Sharpe unter Null-Hypothese (steigt mit N). Strategie besteht nur wenn DSR > 0 bei p < 0.05.
+
+### 5.5 Meta-Overfitting Schutz
+
+- **WFA-Konfiguration einfrieren:** Fenstergrößen, Fitness-Funktion, Parameter-Ranges einmal festlegen, mindestens 3 Monate nicht ändern
+- **N_total tracken:** Jede getestete Strategie zählt, auch verworfene. DSR berücksichtigt N_total
+- **Logische Begründung:** Jede Strategie braucht eine dokumentierte Hypothese, warum der Edge existiert — statistische Signifikanz allein reicht nicht
 
 ---
 
-## Challenger-Logik
+## 6. Strategie-Hierarchie & Deployment
+
+### 6.1 Champions & Challengers
 
 ```
-1. Strategie kommt aus Warteschlange → wird Challenger (Paper)
-2. Läuft maximal 24h, sammelt mindestens 100 Trades
-3. Vergleich mit Bronze Champion:
-   ├─ Challenger BESSER (Sharpe > Bronze + 0.1)? → Challenger wird Bronze
-   └─ Challenger SCHLECHTER? → Verworfen, nächste aus Warteschlange
-4. Falls Warteschlange leer → Discovery Pipeline priorisieren
+CHAMPIONS (Paper)              CHALLENGERS (Paper)
+┌──────────────────┐          ┌──────────────────┐
+│ 🥇 GOLD   (50%) │          │ Challenger 1     │
+│ 🥈 SILVER (30%) │          │ Challenger 2     │
+│ 🥉 BRONZE (20%) │          └──────────────────┘
+└──────────────────┘
+        ▲                     WARTESCHLANGE (max 5)
+        └─── Aufstieg ◄───── getestete Strategien
 ```
 
-### Multiple Testing Correction
+### 6.2 Challenger-Logik
 
-Bei vielen getesteten Challengern steigt die Wahrscheinlichkeit, dass einer "zufällig" gut abschneidet. Deshalb:
-- **Benjamini-Hochberg FDR** bei 10%: Korrigiert für Mehrfachtestung
-- Erst wenn ein Challenger auch nach FDR-Korrektur signifikant besser ist, wird er befördert
-
-### Sicherheitsmechanismen
+- Läuft max 24h, sammelt min 50 Trades
+- **Early Kill:** Wenn nach 30 Trades klar unprofitabel → sofort stoppen
+- Vergleich mit Bronze: Challenger besser (Sharpe > Bronze + 0.1)?
+- **BHY-FDR Korrektur** bei 10%: Erst nach FDR-Korrektur signifikant besser → Aufstieg
 
 | Regel | Wert |
 |-------|------|
-| Mindest-Trades vor Vergleich | 50 |
-| Mindest-Testzeit | 24h |
-| Maximum-Testzeit | 24h |
+| Mindest-Trades | 50 |
+| Max Testzeit | 24h |
 | Cooldown nach Swap | 6h |
-| Max Swaps pro Tag | 3 |
-| Rollback-Fenster | 2h nach Swap |
+| Max Swaps/Tag | 3 |
+| Rollback-Fenster | 2h |
+
+### 6.3 Canary Deployment (Ramp-Up)
+
+Kein direkter Sprung auf volle Allokation. Stufenweiser Aufbau:
+
+| Phase | Kapital | Min. Dauer | Gate zum nächsten Level |
+|-------|---------|------------|------------------------|
+| **Shadow** | 0% (nur Simulation) | 50 Trades / 2 Wochen | Alle Validation Gates bestanden |
+| **Canary** | 1% des Portfolios | 30 Live-Trades | Positive PnL, kein unerwartetes Verhalten |
+| **Scaling** | 5% des Portfolios | 100 Live-Trades | Sharpe > 1.0 ann., Max DD < 3% |
+| **Full** | Target (20/30/50%) | Ongoing | Konsistente Performance |
+
+**Reverse-Ramp:** Bei Drawdown > Schwelle → sofort eine Stufe zurück. Bei Canary-Phase Drawdown → auf 0% zurück.
+
+### 6.4 Correlation Constraints
+
+- Max paarweise |r| < 0.60 zwischen Champions (Equity-Kurven, rolling 24h)
+- Drawdown-Korrelation prüfen: Fallen alle Champions gleichzeitig? → Zu hohes systemisches Risiko
+- Min. 2 verschiedene Strategy-Familien unter Champions
+- Korrelation VOR Swap prüfen
 
 ---
 
-## Strategy Correlation Constraints
+## 7. Risk Management
 
-Champions müssen diversifiziert sein. Wenn alle drei die gleiche Logik verwenden, steigt das systemische Risiko.
+### 7.1 Portfolio-Level
 
-**Regeln:**
-- Max paarweise Korrelation |r| < 0.60 zwischen Champions (gemessen an Equity-Kurven)
-- Drawdown-Korrelation prüfen: Fallen alle Champions gleichzeitig? → Zu hohes Risiko
-- Mindestens 2 verschiedene Strategy-Familien unter den Champions (z.B. Trend + Mean-Reversion)
-- Bei Challenger-Aufstieg: Korrelation mit bestehenden Champions prüfen VOR Swap
+| Regel | Wert |
+|-------|------|
+| **Max Net Exposure** | ±30% NAV in eine Richtung |
+| **Max Exposure pro Asset** | 40% NAV |
+| **Daily Loss Hard Stop** | 2% → alle Trades stoppen |
+| **Weekly Loss Limit** | 4% |
+| **Monthly Loss Limit** | 6% |
 
-**Messung:**
-- Rolling Pearson-Korrelation über 24h-Fenster der PnL-Serien
-- Berechnet bei jedem Champion-Vergleich (alle 4h)
+Wenn Gold und Silver gleichzeitig Long BTC → effektiv 80% in eine Richtung → **wird vom Risk Engine blockiert** (Net Exposure > 30%).
 
----
+### 7.2 Position Sizing
 
-## Pair Selection
+**1-2% Risk per Trade ist bei 50-100 Trades/Tag katastrophal.** Korrekt:
 
-Das System handelt nicht nur ein Paar. Pair Selection ist dynamisch:
+| Parameter | Wert |
+|-----------|------|
+| **Risk per Trade** | 0.02% - 0.05% des Portfolio-NAV |
+| **Sizing-Methode** | Quarter-Kelly (25% des Kelly-Optimums) |
+| **Kelly Recalculation** | Täglich, rolling 30d Daten |
+| **Stop-Loss** | 2-3× ATR vom Entry |
+| **Max gleichzeitige Positionen** | 5 pro Strategie, 10 Portfolio-weit |
 
-**Kriterien:**
-- **Liquidität** ist Hauptkriterium: Ausreichendes Orderbook-Depth für geplante Position Sizes
-- Mindest-24h-Volumen (konfigurierbar, z.B. >$50M)
-- USDT-Paare und Krypto/Krypto-Paare (z.B. ETH/BTC) wenn Liquidität gegeben
-- Verschiedene Strategien können verschiedene Paare handeln
+**Herleitung:** Daily Loss Budget 2% / 100 Trades = 0.02% per Trade. Quarter-Kelly als Obergrenze.
 
-**Dynamische Auswahl:**
-- Täglich: Top-Paare nach Volumen + Volatilität evaluieren
-- Strategie-spezifisch: Mean-Reversion funktioniert besser auf hochkorrelierten Paaren, Trend-Following auf volatilen Paaren
-- Blacklist für Paare mit bekannten Problemen (Delisting-Risiko, extreme Spreads)
+### 7.3 Circuit Breaker
 
----
+| Stufe | Trigger | Aktion |
+|-------|---------|--------|
+| **REDUCE** | Portfolio DD > 5% | Position Sizes halbieren, 1h keine neuen Trades |
+| **PAUSE** | Portfolio DD > 10% oder 3+ Champions im DD | Alle Trades stoppen, nur Monitoring |
+| **FULL STOP** | Portfolio DD > 15% oder Exchange-Fehler | Alle Positionen schließen, Telegram-Alert |
 
-## Selbstverbesserung
+### 7.4 Exchange-seitige Stop-Losses
 
-### Optimizer Agent (Claude CLI, periodisch)
-
-**Mikro-Optimierung (alle 1-4h):**
-- ATR-Multiplier, Threshold-Werte, Stop-Distances anpassen
-- Basierend auf letzte 4-12h Performance-Daten
-
-**Makro-Optimierung (täglich):**
-- Walk-Forward Reoptimierung mit IS=5d, OOS=2d
-- Größere Parameter-Änderungen
-- Walk-Forward Efficiency (WFE) muss > 0.5 sein
-
-### Analyzer Agent (Claude CLI, alle 1-4h)
-
-- Rolling Sharpe (4h, 12h, 24h Fenster) aus DB berechnen
-- Rolling Win Rate, Rolling Drawdown
-- Performance-Drift erkennen
-- Alerts bei Anomalien triggern
+**Immer aktiv, unabhängig vom Bot:** Jede Position hat einen OCO-Order auf der Exchange. Falls Bot crasht → Exchange schließt automatisch.
 
 ---
 
-## Erfolgsmessung
+## 8. Erfolgsmessung
 
-### Composite Score
+### 8.1 Composite Score (Rank-basiert)
+
+Metriken haben verschiedene Skalen → **Percentile-Rank-Normalisierung** über alle verglichenen Strategien:
 
 ```
-Score = (Sortino × 0.4) + (Calmar × 0.3) + (Profit Factor × 0.2) + (Consistency × 0.1)
+Score = 0.30 × rank(Sortino) + 0.30 × rank(Calmar) + 0.25 × rank(ProfitFactor) + 0.15 × rank(Consistency)
 ```
 
-| Metrik | Gewichtung | Warum |
-|--------|------------|-------|
-| **Sortino Ratio** | 40% | Bestraft nur Downside-Volatilität |
-| **Calmar Ratio** | 30% | Return / Max Drawdown |
-| **Profit Factor** | 20% | Gross Profit / Gross Loss |
-| **Consistency** | 10% | % profitable 4h-Perioden |
+Wobei `rank()` = Percentile-Rang (0-100) unter allen aktiven + Challenger-Strategien.
 
-### Alpha vs Return
+**Gewichte für mindestens 3 Monate einfrieren.** Kein Gewichte-Tuning nach ersten Ergebnissen.
+
+| Metrik | Gewicht | Misst |
+|--------|---------|-------|
+| Sortino | 30% | Risiko-adjustierte Rendite (Downside) |
+| Calmar | 30% | Rendite / Max Drawdown |
+| Profit Factor | 25% | Brutto-Gewinn / Brutto-Verlust |
+| Consistency | 15% | % profitable 4h-Perioden |
+
+### 8.2 Alpha & Benchmark
 
 ```
-Benchmark = Gesamte Krypto-Marktkapitalisierung (CoinGecko API)
-Alpha = Strategie-Return - Markt-Return
-
-Strategie mit positivem Return aber negativem Alpha wird degradiert.
+Benchmark = Krypto-Marktkapitalisierung (CoinGecko API)
+Alpha = Strategie-Return − Markt-Return
+Positiver Return + negativer Alpha → Strategie wird degradiert.
 ```
-
-### Monte Carlo Validierung
-
-Jede Strategie muss Monte Carlo bestehen bevor sie Champion werden kann:
-
-- **Bootstrap Resampling:** Trade-Sequenz 10.000x zufällig neu ordnen
-- **95% Konfidenzintervall** für Sharpe Ratio muss > 0 sein
-- **Worst-Case Drawdown** aus Monte Carlo → bestimmt maximale Position Size
-- Strategien die nur durch glückliche Trade-Reihenfolge profitabel sind, werden aussortiert
 
 ---
 
-## Overfitting-Schutz
+## 9. Overfitting-Schutz
 
-### 1. Walk-Forward Analysis
-- In-Sample: 5 Tage, Out-of-Sample: 2 Tage
-- Walk-Forward Efficiency (WFE) = OOS-Performance / IS-Performance
-- WFE muss > 0.5 sein (OOS mindestens halb so gut wie IS)
+| Methode | Details |
+|---------|---------|
+| **Walk-Forward** | IS=5d, OOS=2d, WFE > 0.5. Konfiguration 3 Monate eingefroren. |
+| **Monte Carlo** | 10.000× Bootstrap-Resampling der Trade-Sequenz. 95% CI Sharpe > 0. |
+| **Regime-Test** | Bull (+10%/7d): Alpha > 0. Bear (−10%/7d): DD < Markt. Sideways (±5%/7d): Return > 0. |
+| **Parameter-Sensitivität** | ±20% Variation. Starke Schwankung = Overfit. |
+| **DSR** | Deflated Sharpe Ratio korrigiert für N_total, Skewness, Kurtosis. |
+| **Meta-Overfitting** | WFA-Config einfrieren. N_total tracken. Logische Hypothese dokumentieren. |
+| **Cost-Edge** | Profit Factor > 1.5 nach allen Kosten (Fees + Slippage × 1.5). |
 
-### 2. Regime-Testing
+### Echtzeit-Regime-Erkennung
 
-Backtests müssen in allen Marktphasen bestehen:
+Zwei Stufen:
 
-| Regime | Erkennung | Mindest-Performance |
-|--------|-----------|---------------------|
-| **Bull** | Markt +10% in 7d | Positiver Alpha |
-| **Bear** | Markt -10% in 7d | Geringerer Verlust als Markt |
-| **Sideways** | Markt ±5% in 7d | Positiver Return |
+| Stufe | Methode | Latenz | Update |
+|-------|---------|--------|--------|
+| **Schnell** | Threshold: Rolling 4h Volatilität > X → "High-Vol" Flag | Instant | Jede Minute |
+| **Langsam** | HMM (hmmlearn, 2-3 States) auf täglichen Returns | 1-2 Tage | Alle 4-6h |
 
-**Erweiterte Regime-Erkennung:**
-- DVOL (Deribit Volatility Index) für Volatilitäts-Regime
-- Funding Rates als Markt-Sentiment-Indikator
-- Fear & Greed Index
-- BTC-Altcoin Korrelation (hohe Korrelation = Risk-On/Off Regime)
-
-### 3. Parameter-Sensitivität
-
-Parameter ±20% variieren. Wenn Performance stark schwankt → OVERFIT. Stabile Strategie = kleine Parameter-Änderungen → kleine Performance-Änderungen.
-
-### 4. Multiple Testing Correction
-
-Bei N getesteten Strategien: Benjamini-Hochberg FDR bei 10%. Verhindert dass "zufällig gute" Strategien durchkommen.
+Regime beeinflusst: Welche Strategien aktiv sind, Position Sizes, Stop-Distances.
 
 ---
 
-## Degradation Monitoring
+## 10. Operations
 
-### Rolling Windows
+### 10.1 Agent Decision Logging
 
-| Window | Aktualisierung | Verwendet für |
-|--------|----------------|---------------|
-| 1h | Jede Minute | Anomalie-Erkennung |
+Jede Claude-CLI-Entscheidung wird geloggt — vollständig und unveränderbar:
+
+| Feld | Inhalt |
+|------|--------|
+| `prompt_hash` | SHA-256 des vollen Prompts |
+| `response_text` | Volle Claude-Antwort |
+| `parsed_action` | Strukturiertes JSON (validiert gegen Schema) |
+| `market_snapshot` | Preis, Volumen, Regime zum Zeitpunkt |
+| `guardrail_results` | Range-Check, Schema-Check, Exposure-Check |
+| `execution_result` | Was tatsächlich passiert ist |
+
+**Speicherung:** Append-only JSONL (Hash-Chain für Tamper-Detection) + PostgreSQL für Queries.
+
+**Guardrails:** Jede Claude-Antwort wird validiert:
+- JSON-Schema Validation (ungültig → verwerfen)
+- Range-Check: Preise ±5% vom Markt (sonst → Halluzination)
+- Rate-Limit: Max N Aktionen pro Stunde
+- Exposure-Check: Würde die Aktion Limits verletzen?
+
+### 10.2 Change Governance
+
+| Änderungstyp | Freigabe | Tests vorher |
+|--------------|----------|--------------|
+| Mikro-Parameter (±10%) | Autonom | Backrecheck |
+| Makro-Parameter (neue Indikatoren) | Autonom | Alle Validation Gates |
+| Neue Strategie aktivieren | Autonom | Alle Gates + Canary |
+| Strategie-Code editieren | **Menschlich** | Code Review |
+| System-Config/DB-Schema | **Menschlich** | — |
+
+**Grundregel:** Claude gibt JSON-Anweisungen. Der Python Daemon validiert und führt aus. Claude hat nie direkten Schreibzugriff auf DB oder Exchange.
+
+### 10.3 Degradation Monitoring
+
+| Window | Update | Verwendet für |
+|--------|--------|---------------|
+| 1h | Jede Min | Anomalie-Erkennung |
 | 4h | Alle 5 Min | Micro-Optimierung |
 | 12h | Alle 15 Min | Trend-Erkennung |
 | 24h | Stündlich | Champion-Vergleich |
 
-### Alert-Stufen
+**Alert-Stufen:**
 
 | Stufe | Trigger | Aktion |
 |-------|---------|--------|
-| **INFO** | Sharpe fällt um 10% | Logging |
-| **WARNING** | Sharpe fällt um 25% | Telegram Notification |
-| **CRITICAL** | Sharpe fällt um 50% | Auto-Pause + Review |
-| **EMERGENCY** | Drawdown > 15% | Sofortiger Stop |
+| INFO | Sharpe −10% | Log |
+| WARNING | Sharpe −25% | Telegram + Position Size −50% + 2h Beobachtung |
+| CRITICAL | Sharpe −50% | Auto-Pause, Optimizer triggern |
+| EMERGENCY | DD > 15% | Full Stop, alle Positionen schließen |
 
-### Auto-Response bei Degradation
+### 10.4 Crash Recovery
 
-```
-Degradation erkannt (Sharpe -25% über 4h)
-    │
-    ▼
-1. Position Size -50%
-2. Optimizer triggern
-3. 2h Beobachtungsfenster
-    │
-    ├─ Erholt sich? → Normalbetrieb
-    └─ Weiter schlecht? → Abstufung (Gold→Silver→Bronze)
-```
+- **systemd:** `Restart=always`, `RestartSec=10`, `WatchdogSec=300`
+- **Bei Neustart:** Offene Positionen prüfen (Exchange-Side), DB-State abgleichen, Inkonsistenzen → Telegram-Alert + manueller Review
+- **Health-Check:** HTTP `/health` Endpoint, Cron prüft alle 5 Min
 
 ---
 
-## Emergency Procedures & Crash Recovery
+## 11. Paper Trading
 
-### Circuit Breaker (3-stufig)
+### Hybrid-Ansatz (Industrie-Standard)
 
-| Stufe | Trigger | Aktion |
-|-------|---------|--------|
-| **REDUCE** | Drawdown > 10% (Portfolio) | Position Sizes halbieren, keine neuen Trades für 1h |
-| **PAUSE** | Drawdown > 15% oder 3+ Champions im Drawdown | Alle Trades stoppen, nur Monitoring aktiv |
-| **FULL STOP** | Drawdown > 20% oder Exchange-Fehler | Alle Positionen schließen, System stoppt, Telegram-Alert |
+**Nicht Binance Testnet** (unrealistisches Orderbook, monatliche Resets, Preisabweichungen). Stattdessen:
 
-### Exchange-seitige Stop-Losses
+- **Live-Marktdaten** von echter Binance API (WebSocket: Orderbook, Trades, Candles)
+- **Lokale Order-Simulation** im Python Daemon
 
-**Immer aktiv, unabhängig vom Bot-Status:**
-- Jede Position hat einen Exchange-seitigen Stop-Loss (OCO Order)
-- Falls Bot crasht, Exchange schließt Position automatisch
-- Stop-Loss = 2-3x ATR vom Entry
+### Slippage Model
 
-### Crash Recovery
+| Komponente | Beschreibung |
+|------------|--------------|
+| Orderbook-Depth | Echte Bid/Ask-Tiefe → Fill-Preis berechnen |
+| Market Impact | Almgren-Chriss: Größere Orders bewegen Preis stärker |
+| Zeitabhängig | Höhere Slippage in illiquiden Phasen |
+| **Sicherheits-Multiplikator** | **1.5×** auf berechnete Slippage (konservativ) |
 
-```
-Bot-Absturz erkannt (systemd Restart=always)
-    │
-    ▼
-1. Health-Check: DB erreichbar? Exchange erreichbar?
-2. Offene Positionen prüfen (Exchange-Side)
-3. Letzten konsistenten DB-State laden
-4. Abgleich: Bot-State vs Exchange-State
-5. Inkonsistenzen → Telegram-Alert, manueller Review
-6. Alles konsistent → Normalbetrieb fortsetzen
-```
+Weitere Simulation: Exchange-Fees (Binance 0.1%), Partial Fills (volumenbasiert), Latenz (50-500ms).
 
-### Monitoring
+**Testnet:** Nur für API-Connectivity-Tests und Order-Format-Validierung, nicht für Strategie-Evaluation.
 
-- Health-Check Endpoint: `/health` (HTTP)
-- systemd watchdog: Restart bei Timeout
-- Telegram-Alert bei jedem Restart
+### Execution Quality Feedback (bei Echtgeld-Umstellung)
+
+Vergleichstabelle: Simulierter Fill vs. tatsächlicher Fill → Slippage-Modell kalibrieren.
 
 ---
 
-## Strategy Versioning
+## 12. Datenmanagement
 
-Jede Strategie wird versioniert, um Rollbacks zu ermöglichen:
+| Aspekt | Lösung |
+|--------|--------|
+| **Historische Candles** | Binance REST API (1m/5m), gespeichert in PostgreSQL |
+| **Orderbook** | Live via WebSocket, nicht historisch (zu viel Storage) |
+| **Datenqualität** | Spike-Filter (±X% in einem Candle), Gap-Detection, Validierung |
+| **Look-Ahead Bias** | Daten erst nach Candle-Close verfügbar. Strikt erzwungen. |
+| **Survivorship Bias** | Universe-Changes loggen (Delistings, neue Listings) |
+| **Clock/Time-Sync** | NTP, Exchange-Server-Time als Referenz |
+
+---
+
+## 13. Bootstrapping Phase
+
+| Phase | Zeitraum | Aktion |
+|-------|----------|--------|
+| **Seed** | Tag 1-7 | 3 Basis-Strategien (Trend, Mean-Reversion, Volatility-Breakout), gleichgewichtet, Daten sammeln |
+| **Validierung** | Tag 7-14 | Walk-Forward + Monte Carlo mit gesammelten Daten. Erste Optimierung. |
+| **Ranking** | Tag 14-21 | Champion-System aktivieren. Erste Challenger aus Discovery Pipeline. |
+| **Vollbetrieb** | Ab Tag 21 | Komplettes System mit allen Gates und Canary Deployment. |
+
+---
+
+## 14. Selbstverbesserung
+
+**Mikro-Optimierung (alle 1-4h, Claude CLI):**
+- ATR-Multiplier, Thresholds, Stop-Distances anpassen (max ±10% autonom)
+- Basierend auf Rolling-Performance der letzten 4-12h
+
+**Makro-Optimierung (täglich, Claude CLI):**
+- Walk-Forward Reoptimierung (IS=5d, OOS=2d, WFE > 0.5)
+- Neue Strategie-Version → Canary Deployment
+
+---
+
+## 15. Technische Infrastruktur
+
+### Agents
+
+| # | Agent | Implementierung | Frequenz |
+|---|-------|-----------------|----------|
+| 1 | Signal Engine | Python Daemon | Kontinuierlich |
+| 2 | Risk Engine | Python Daemon | Bei jedem Signal |
+| 3 | Order Executor | Python Daemon | Bei validiertem Trade |
+| 4 | Trade Monitor | Python Daemon | Kontinuierlich |
+| 5 | Orchestrator | Claude CLI | Alle 1-4h |
+| 6 | Analyzer | Claude CLI | Alle 1-4h |
+| 7 | Optimizer | Claude CLI | Alle 1-4h / Täglich |
+| 8 | Research Agent | Claude CLI | Wöchentlich |
+| 9 | Coder Agent | Claude CLI | Bei neuer Hypothese |
+| 10 | Evaluator | Claude CLI | Nach Backtests |
+
+### Datenbank (PostgreSQL)
+
+```sql
+trades              -- Jeder Trade (Entry, Exit, PnL, Fees, Slippage)
+strategy_snapshots  -- Stündliche Metriken (Sharpe, Sortino, DD, Score)
+alerts              -- Warnungen und Events
+optimizer_runs      -- Parameter-Änderungen mit Begründung
+discovery_pipeline  -- Strategien im Prozess + N_total Zähler
+agent_decisions     -- Vollständiges Decision Log (Prompt, Response, Guardrails)
+```
+
+### Strategy Versioning
 
 ```
 strategies/
 ├── strat_001_v1/    # Original
-├── strat_001_v2/    # Nach erster Optimierung
-├── strat_002_v1/
-└── registry.json    # Kontrolliert welche Version aktiv ist
+├── strat_001_v2/    # Nach Optimierung
+└── registry.json    # Aktive Versionen
 ```
 
-**registry.json:**
-```json
-{
-  "active_strategies": {
-    "gold": { "id": "strat_001", "version": "v2" },
-    "silver": { "id": "strat_002", "version": "v1" },
-    "bronze": { "id": "strat_003", "version": "v1" }
-  }
-}
-```
+Rollback: Version in registry.json zurücksetzen → Daemon lädt automatisch.
 
-**Regeln:**
-- Neue Version bei jeder Makro-Optimierung (Parameter-Änderung)
-- Mikro-Optimierungen (Threshold-Tuning) überschreiben aktuelle Version
-- Rollback: Version in registry.json zurücksetzen, Python Daemon lädt automatisch neu
-- Alte Versionen bleiben erhalten (kein Löschen)
-
----
-
-## Paper Trading - Realismus
-
-### Slippage Model
-
-Nicht nur ATR-basiert, sondern mehrstufig:
-
-| Komponente | Beschreibung |
-|------------|--------------|
-| **Orderbook-Depth** | Echte Bid/Ask-Tiefe aus WebSocket → tatsächlicher Fill-Preis berechnet |
-| **Market Impact** | Almgren-Chriss Modell: Größere Orders bewegen den Preis stärker |
-| **Zeitabhängig** | Höhere Slippage in illiquiden Phasen (Nacht, Wochenende) |
-| **Spread** | Live Bid/Ask Spread (nicht geschätzt) |
-
-### Weitere Simulation
-
-| Aspekt | Wie simuliert |
-|--------|---------------|
-| Gebühren | Exchange-spezifisch (z.B. Binance: 0.1%) |
-| Partial Fills | Volumen-basiert |
-| Latenz | 50-500ms Delay |
-
-### Exchange Testnets
-
-| Exchange | URL | Features |
-|----------|-----|----------|
-| **Binance** | testnet.binancefuture.com | Echte Preise, virtuelle Orders |
-| **Bybit** | api-demo.bybit.com | 50k USDT virtuell |
-
-Gleiche API wie Live → nahtloser Umstieg (nur URL-Änderung).
-
----
-
-## Backtesting Engine
-
-### VectorBT (primär für Backtests)
-
-- Vektorisierte Berechnung (NumPy/Pandas) → 1000x schneller als event-based Engines
-- Ideal für schnelles Durchprobieren vieler Hypothesen
-- Monte Carlo Simulation eingebaut
-- Python-native, einfache Integration
-
-### NautilusTrader (Produktion, optional)
-
-- Rust-Kern + Python-API → hohe Performance
-- Unified Backtest + Live Trading (gleicher Code)
-- Event-driven, realistischere Simulation
-- Für spätere Produktions-Migration geeignet
-
-**Workflow:** VectorBT für schnelle Discovery-Backtests → NautilusTrader für finale Validierung und Live-Trading.
-
----
-
-## Budget Tracking (Virtuelle Konten)
-
-Jede Strategie hat ihr eigenes virtuelles Konto:
-
-```
-Gesamt-Budget: $10,000 (konfigurierbar)
-
-🥇 GOLD:   50% = $5,000 → Trades, PnL, Balance getrackt
-🥈 SILVER: 30% = $3,000 → Trades, PnL, Balance getrackt
-🥉 BRONZE: 20% = $2,000 → Trades, PnL, Balance getrackt
-```
-
-### Performance Attribution
-
-Jeder Trade wird seiner Strategie zugeordnet:
-```json
-{
-    "trade_id": "t_20240115_001",
-    "strategy_id": "strat_001_v2",
-    "strategy_tier": "gold",
-    "entry_price": 42150.00,
-    "exit_price": 42380.00,
-    "pnl": 23.50,
-    "pnl_percent": 0.55,
-    "virtual_balance_after": 5234.50
-}
-```
-
----
-
-## Money Management
-
-### Default-System
-
-| Regel | Wert |
-|-------|------|
-| Risk per Trade | 1-2% |
-| Stop Loss | 2-3x ATR |
-| Trailing Stop | ATR-basiert |
-| Take Profit | Min 1:2 R:R |
-| Max gleichzeitige Positionen | 5 |
-| Max Drawdown | 20% → System Pause |
-
-### Strategie-spezifisches MM
-
-Wenn eine Strategie eigenes Money Management mitbringt UND dieses durch Backtest validiert ist → Strategie-MM verwenden. Sonst → Default.
-
----
-
-## Logging & Datenbank
-
-### PostgreSQL (zentral)
-
-```sql
--- Kern-Tabellen
-trades              -- Jeder einzelne Trade
-strategy_snapshots  -- Stündliche Strategy-Metriken
-alerts              -- Alle Warnungen und Ereignisse
-optimizer_runs      -- Parameter-Änderungen
-discovery_pipeline  -- Neue Strategien im Prozess
-```
-
-### Trade Log Schema
-
-```sql
-CREATE TABLE trades (
-    id SERIAL PRIMARY KEY,
-    timestamp TIMESTAMPTZ DEFAULT NOW(),
-    strategy_id VARCHAR(50),
-    strategy_tier VARCHAR(10),  -- gold/silver/bronze/challenger
-    symbol VARCHAR(20),
-    side VARCHAR(10),           -- buy/sell
-    entry_price DECIMAL(20,8),
-    exit_price DECIMAL(20,8),
-    quantity DECIMAL(20,8),
-    pnl DECIMAL(20,8),
-    pnl_percent DECIMAL(10,4),
-    fees DECIMAL(20,8),
-    slippage DECIMAL(20,8),
-    duration_seconds INTEGER,
-    metadata JSONB
-);
-```
-
-### Strategy Snapshot Schema
-
-```sql
-CREATE TABLE strategy_snapshots (
-    id SERIAL PRIMARY KEY,
-    timestamp TIMESTAMPTZ DEFAULT NOW(),
-    strategy_id VARCHAR(50),
-    tier VARCHAR(10),
-    total_trades INTEGER,
-    win_rate DECIMAL(5,2),
-    profit_factor DECIMAL(10,4),
-    sharpe_ratio DECIMAL(10,4),
-    sortino_ratio DECIMAL(10,4),
-    calmar_ratio DECIMAL(10,4),
-    max_drawdown DECIMAL(10,4),
-    composite_score DECIMAL(10,4),
-    alpha DECIMAL(10,4),
-    allocated_balance DECIMAL(20,8),
-    current_balance DECIMAL(20,8),
-    sharpe_1h DECIMAL(10,4),
-    sharpe_4h DECIMAL(10,4),
-    sharpe_24h DECIMAL(10,4)
-);
-```
-
----
-
-## STATUS.md & Telegram
-
-### Auto-generierter STATUS.md (alle 4h)
-
-```markdown
-# Trading Genesis 2 - Status
-
-**Stand:** 2024-01-15 14:00 UTC | **Uptime:** 3d 14h | **Modus:** Paper Trading
-
-## Portfolio
-| Metrik | Wert |
-|--------|------|
-| Balance | $10,266.70 |
-| Tages-PnL | +$142.30 (+1.41%) |
-| Alpha (vs Markt) | +0.8% |
-| Trades heute | 100 |
-
-## Champions
-| Rang | Score | PnL 24h | Trades |
-|------|-------|---------|--------|
-| 🥇 Gold | 2.34 | +$234.50 | 47 |
-| 🥈 Silver | 1.98 | -$12.80 | 31 |
-| 🥉 Bronze | 1.76 | +$45.00 | 22 |
-
-## Challengers
-| Slot | Fortschritt | Trades | vs Bronze |
-|------|-------------|--------|-----------|
-| Challenger 1 | 18h/24h | 75 | +0.12 |
-| Challenger 2 | 6h/24h | 25 | +0.05 |
-
-## Alerts (letzte 24h)
-- ⚠️ 12:30 - Silver: Sharpe -15%
-- ✅ 12:45 - Silver: Erholt auf -5%
-- 🔄 08:00 - Gold/Silver Swap durchgeführt
-```
-
-Strategienamen werden dynamisch vergeben. Die Nachricht zeigt nur Rang und Performance.
-
-### Telegram-Benachrichtigungen
-
-Nutzt den bestehenden Telegram-Bot: `/home/rolf_vps/telegram-bot/`
-
-**Regelmäßig:**
-| Frequenz | Inhalt |
-|----------|--------|
-| Alle 4h | Kurz-Status (PnL, Trades, Alpha) |
-| Täglich 08:00 | Tages-Report (Champions, Alerts) |
-| Wöchentlich | Wochen-Summary + Discovery-Pipeline |
-
-**Proaktive Alerts (Event-getriggert):**
-| Event | Nachricht |
-|-------|-----------|
-| API-Fehler | Exchange/Daten-API down |
-| Drawdown > 10% | Drawdown-Warnung |
-| Champion-Swap | Rang-Änderung |
-| System-Pause | Trading pausiert |
-| Challenger schlägt Bronze | Neuer Champion |
-| Bot-Restart | System neugestartet |
-
----
-
-## Alle Agents
-
-| # | Agent | Typ | Läuft | Implementierung |
-|---|-------|-----|-------|-----------------|
-| 1 | **Orchestrator** | Koordination | Alle 1-4h | Claude CLI |
-| 2 | **Signal Engine** | Echtzeit | Kontinuierlich | Python Daemon |
-| 3 | **Risk Engine** | Echtzeit | Bei jedem Signal | Python Daemon |
-| 4 | **Order Executor** | Echtzeit | Bei validiertem Trade | Python Daemon |
-| 5 | **Trade Monitor** | Echtzeit | Kontinuierlich | Python Daemon |
-| 6 | **Analyzer Agent** | Analyse | Alle 1-4h | Claude CLI |
-| 7 | **Optimizer Agent** | Analyse | Alle 1-4h / Täglich | Claude CLI |
-| 8 | **Research Agent** | Discovery | Wöchentlich | Claude CLI |
-| 9 | **Coder Agent** | Discovery | Bei neuer Hypothese | Claude CLI |
-| 10 | **Evaluator Agent** | Discovery | Nach Backtests | Claude CLI |
-
-Reduziert von 13 auf 10: Parser und Validator sind in den Research Agent integriert. Backtest-Ausführung ist automatisiert (VectorBT Script, kein eigener Agent).
-
----
-
-## Technische Infrastruktur
-
-### Kern-APIs
+### APIs
 
 | Service | Zweck | Kosten |
 |---------|-------|--------|
-| Binance Testnet | Paper Trading | Kostenlos |
-| Binance API | Live Marktdaten + WebSocket | Kostenlos |
-| CoinGecko API | Benchmark (Marktcap) | Kostenlos |
+| Binance API | Live-Marktdaten + WebSocket | Kostenlos |
+| CoinGecko | Benchmark (Marktcap) | Kostenlos |
+| ccxt-mcp | Exchange-Anbindung | — |
+| postgres-mcp | Datenbank | — |
 
-### Optionale APIs (strategie-abhängig)
+Optionale APIs bei Bedarf: News (CryptoPanic), Sentiment (LunarCrush), On-Chain (Glassnode).
 
-Werden bei Bedarf hinzugefügt (pending_requirements.json):
-- News APIs (CryptoPanic, etc.)
-- Sentiment APIs (LunarCrush, etc.)
-- On-Chain APIs (Glassnode, etc.)
-- Whale Tracking (Whale Alert, etc.)
+### Telegram
 
-### MCP Server
+| Frequenz | Inhalt |
+|----------|--------|
+| Alle 4h | Kurz-Status (PnL, Trades, Alpha, Champions) |
+| Täglich 08:00 | Tages-Report |
+| Wöchentlich | Summary + Discovery Pipeline |
+| Event-getriggert | Drawdown, Swap, Crash, API-Fehler |
 
-| Server | Zweck |
-|--------|-------|
-| ccxt-mcp | Exchange Daten + Trading |
-| postgres-mcp | Datenbank |
+### Backtesting
 
-### Software Stack
-
-| Komponente | Technologie |
-|------------|-------------|
-| Echtzeit-Engine | Python (asyncio) |
-| Backtesting | VectorBT (Primär), NautilusTrader (Optional) |
-| Datenbank | PostgreSQL |
-| KI-Entscheidungen | Claude Code CLI |
-| Process Management | systemd |
-| Notifications | Telegram Bot |
+- **VectorBT** (primär): Vektorisiert, 1000× schneller, Monte Carlo eingebaut
+- **NautilusTrader** (optional, später): Rust+Python, unified Backtest+Live
