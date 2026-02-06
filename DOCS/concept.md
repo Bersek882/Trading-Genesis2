@@ -18,7 +18,7 @@ Selbstverbesserndes Active-Intraday Krypto-Trading-System mit dynamischer Strate
 
 | Parameter | Wert (Initial) | Später erweiterbar |
 |-----------|----------------|-------------------|
-| **Instrument** | Spot | Perpetual Futures, Cross-Exchange Arbitrage |
+| **Instrument** | Spot | Perpetual Futures |
 | **Richtung** | Long only | Long + Short |
 | **Leverage** | Kein (1x) | Bis 3x |
 | **Paare** | USDT-Paare + Krypto/Krypto (z.B. ETH/BTC) | — |
@@ -100,13 +100,12 @@ class IStrategy:
 
 ### 5.1 Ansatz: Hypothesis Generator
 
-~90% öffentlich verfügbarer Strategien sind overfit. Der Research Agent kopiert nicht — er generiert Hypothesen aus **mehreren Datenquellen**:
+~90% öffentlich verfügbarer Strategien sind overfit. Der Research Agent kopiert nicht — er generiert Hypothesen:
 
 ```
 Research Agent (Claude CLI)
   ├─ Analysiert Marktstruktur aus DB (Volatilität, Trends, Korrelationen)
-  ├─ Analysiert Multi-Source Daten (Funding Rates, Cross-Exchange Spreads, News, On-Chain)
-  ├─ Generiert Hypothese: z.B. "Funding Rate Arbitrage bei >0.05% auf Mid-Cap Alts"
+  ├─ Generiert Hypothese: "Mean-Reversion mit engen BB bei Seitwärtstrend"
   ├─ Kombiniert Building Blocks (siehe unten)
   └─ Optional: Akademische Quellen (arXiv, SSRN) als Inspiration
       │
@@ -114,7 +113,7 @@ Research Agent (Claude CLI)
 Coder Agent (Claude CLI) → Implementiert als IStrategy
       │
       ▼
-Automatisierte Validation Gates (VectorBT + Spezialisierte Backtests)
+Automatisierte Validation Gates (VectorBT)
       │
       ▼
 Evaluator Agent (Claude CLI) → DSR + FDR-Korrektur
@@ -123,28 +122,13 @@ Evaluator Agent (Claude CLI) → DSR + FDR-Korrektur
 Warteschlange (max 5) → bereit für Challenger-Slot
 ```
 
-### 5.1.1 Erweiterte Datenquellen für Hypothesen
-
-Die Research Pipeline ist **nicht auf technische Indikatoren beschränkt**. Verschiedene Strategie-Typen erfordern unterschiedliche Daten:
-
-| Strategie-Typ | Benötigte Datenquellen | Validierung |
-|----------------|----------------------|-------------|
-| **Technisch (TA)** | Candles, Volumen, Orderbook | Standard-Backtesting (VectorBT) |
-| **Cross-Exchange Arbitrage** | Live-Orderbücher mehrerer Exchanges (Binance, OKX, Bybit) | Replay historischer Orderbuch-Snapshots |
-| **Funding Rate Arbitrage** | Perpetual Funding Rates + Spot-Preise | Historische Funding-Rate-Daten (Exchange APIs) |
-| **News/Sentiment-basiert** | CryptoPanic, Twitter/X Sentiment, Google Trends | Event-Backtesting (Timestamp-basiert) |
-| **On-Chain** | Whale Alerts, Exchange In/Outflows, Active Addresses | On-Chain-Daten historisch (Glassnode/CryptoQuant) |
-
-**Daten-Ingestion:** Der Python Daemon sammelt und speichert erweiterte Datenquellen in PostgreSQL. Der Research Agent kann bei der Hypothesengenerierung auf alle verfügbaren Datentypen zugreifen — nicht nur auf Preis/Volumen.
-
 ### 5.2 Building Blocks
 
 | Kategorie | Beispiele |
 |-----------|-----------|
 | **Entry** | Momentum (RSI, MACD), Mean-Reversion (BB, Keltner), Breakout (ATR, Donchian), Volume-Spike |
-| **Entry (Multi-Source)** | Funding Rate Spike, Cross-Exchange Spread, Whale Alert, Sentiment Shift, News Event |
-| **Filter** | Trend (EMA, ADX), Volatilität (ATR-Level), Volume, Regime, Sentiment-Score, Funding-Rate-Level |
-| **Exit** | ATR-Trail, Time-Based, Fixed Target, Chandelier, Funding-Rate-Normalisierung |
+| **Filter** | Trend (EMA, ADX), Volatilität (ATR-Level), Volume, Regime |
+| **Exit** | ATR-Trail, Time-Based, Fixed Target, Chandelier |
 | **Sizing** | Fixed-Fraction, Volatility-Adjusted, Quarter-Kelly |
 
 ### 5.3 Validation Gates
@@ -521,16 +505,14 @@ Rollback: Version in registry.json zurücksetzen → Daemon lädt automatisch.
 
 ### APIs
 
-| Service | Zweck | Kosten | Priorität |
-|---------|-------|--------|-----------|
-| Binance API | Live-Marktdaten + WebSocket + Funding Rates | Kostenlos | Pflicht |
-| OKX / Bybit API | Cross-Exchange Orderbücher (für Arbitrage) | Kostenlos | Hoch |
-| CoinGecko | Benchmark (Marktcap) | Kostenlos | Pflicht |
-| CryptoPanic | News-Events (Echtzeit) | Free Tier verfügbar | Hoch |
-| ccxt-mcp | Multi-Exchange-Anbindung (unified API) | — | Pflicht |
-| postgres-mcp | Datenbank | — | Pflicht |
+| Service | Zweck | Kosten |
+|---------|-------|--------|
+| Binance API | Live-Marktdaten + WebSocket | Kostenlos |
+| CoinGecko | Benchmark (Marktcap) | Kostenlos |
+| ccxt-mcp | Exchange-Anbindung | — |
+| postgres-mcp | Datenbank | — |
 
-**Erweiterbar bei Bedarf:** Sentiment (LunarCrush), On-Chain (Glassnode/CryptoQuant), Social (Twitter/X API).
+Optionale APIs bei Bedarf: News (CryptoPanic), Sentiment (LunarCrush), On-Chain (Glassnode).
 
 ### Telegram
 
